@@ -4,21 +4,21 @@
 {% set quote = '"' %}
 
 {
-  "advertise_addr": "{{ hostvars[inventory_hostname]['ansible_eth1']['ipv4']['address'] }}",
-  "bind_addr": "{{ hostvars[inventory_hostname]['ansible_eth1']['ipv4']['address'] }}",
+  "advertise_addr": "{{ hostvars[inventory_hostname].get('consul_ip_address', hostvars[inventory_hostname]['ansible_' + consul_iface]['ipv4']['address']) }}",
+  "bind_addr": "{{ hostvars[inventory_hostname].get('consul_ip_address', hostvars[inventory_hostname]['ansible_' + consul_iface]['ipv4']['address']) }}",
   "bootstrap": false,
   "server": false,
   "client_addr": "0.0.0.0",
   "node_name": "{{ inventory_hostname_short }}",
   "datacenter": "{{ consul_datacenter }}",
   "data_dir": "{{ consul_data_path }}",
-  "datacenter": "online",
   "domain": "{{ consul_domain }}",
-  "encrypt": "{{ consul_raw_key['stdout']}}",
+{% if consul_encryption_enable %}
+  "encrypt": "{{ consul_raw_key['stdout']}}",{% endif %}
   "log_level": "{{ consul_log_level }}",
-  "enable_syslog": {{ consul_syslog_enable }},
+  "enable_syslog": {{ 'true' if consul_syslog_enable else 'false' }},
   "start_join": {{ lbracket }}{% for host in groups['cluster_nodes'] %}
-   {{ comma() }}{{ quote }}{{ hostvars[host]['ansible_eth1']['ipv4']['address'] }}{{ quote }}
+   {{ comma() }}{{ quote }}{{ hostvars[host]['consul_ip_address'] if 'consul_ip_address' in hostvars[host] else hostvars[host]['ansible_' + consul_iface]['ipv4']['address'] }}{{ quote }}
 {% endfor %}{{ rbracket }},
   "ui_dir": "/opt/consul/ui/dist"
 }

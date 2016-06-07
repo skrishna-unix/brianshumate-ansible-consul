@@ -13,29 +13,36 @@
 - name: "Distribution specific variables"
   include_vars: "{{ ansible_distribution }}.yml"
 
-- name: "CentOS tasks"
-  include: CentOS.yml
-  when: ansible_distribution  == "CentOS"
+- name: "Check installed consul version"
+  shell: "consul version | sed -n -r -e 's/.*v([0-9]\\.[0-9]+\\.[0-9]+).*/\\1/p' || echo"
+  register: consul_version_result
 
-- name: "Debian tasks"
-  include: Debian.yml
-  when: ansible_distribution  == "Debian"
+- block:
+  - name: "CentOS tasks"
+    include: CentOS.yml
+    when: ansible_distribution  == "CentOS"
 
-- name: "Red Hat tasks"
-  include: RedHat.yml
-  when: ansible_distribution  == "RedHat"
+  - name: "Debian tasks"
+    include: Debian.yml
+    when: ansible_distribution  == "Debian"
 
-- name: "Ubuntu tasks"
-  include: Ubuntu.yml
-  when: ansible_distribution  == "Ubuntu"
+  - name: "Red Hat tasks"
+    include: RedHat.yml
+    when: ansible_distribution  == "RedHat"
+
+  - name: "Ubuntu tasks"
+    include: Ubuntu.yml
+    when: ansible_distribution  == "Ubuntu"
+  when: "consul_version_result.stdout != consul_version"
 
 - name: Generate Consul key
   shell: PATH=/usr/local/bin:$PATH consul keygen
   register: consul_raw_key
   run_once: true
+  when: "consul_encryption_enable"
 
 - name: Consul directories
-  file: "dest=/opt/consul state=directory owner={{ consul_user }} group={{ consul_group}}"
+  file: "dest=/opt/consul state=directory owner={{ consul_user }} group={{ consul_group}}"  
 
 - file: "dest=/opt/consul/ui state=directory owner={{ consul_user }} group={{ consul_group}}"
 
@@ -49,27 +56,26 @@
 
 - file: "dest=/etc/consul.d state=directory owner={{ consul_user }} group={{ consul_group}}"
 
-- file: "dest=/etc/consul.d/bootstrap state=directory owner={{ consul_user }} group={{ consul_group}}"
-
-- file: "dest=/etc/consul.d/server state=directory owner={{ consul_user }} group={{ consul_group}}"
-
-- file: "dest=/etc/consul.d/client state=directory owner={{ consul_user }} group={{ consul_group}}"
-
 - name: Initial Consul bootstrap configuration
-  template: src=bootstrap_config.json.j2 dest={{ consul_config_path }}/bootstrap/config.json
+  template: src=bootstrap_config.json.j2 dest={{ consul_config_path }}/config.json
+  when: "consul_node_role == 'bootstrap'"
 
 - name: Initial Consul server configuration
-  template: src=server_config.json.j2 dest={{ consul_config_path }}/server/config.json
+  template: src=server_config.json.j2 dest={{ consul_config_path }}/config.json
+  when: "consul_node_role == 'server'"
 
 - name: Initial Consul client configuration
-  template: src=client_config.json.j2 dest={{ consul_config_path }}/client/config.json
+  template: src=client_config.json.j2 dest={{ consul_config_path }}/config.json
+  when: "consul_node_role == 'client'"
 
 - name: "Download Consul UI"
   get_url: url={{ consul_ui_url }} dest=/tmp/{{ consul_ui_pkg }} sha256sum={{ consul_ui_sha256 }} timeout=74
+  when: "consul_install_ui == true"
   tags: installation
 
 - name: "Install Consul UI"
   unarchive: src=/tmp/{{ consul_ui_pkg }} dest=/opt/consul/ui/ owner={{ consul_user }} group={{ consul_group }} mode=0755 copy=no
+  when: "consul_install_ui == true"
   tags: installation
 
 - name: SYSV init script
@@ -83,3 +89,7 @@
 - name: systemd script
   template: src=consul_systemd.service.j2 dest=/lib/systemd/system/consul.service owner=root group=root mode=644
   when: ansible_distribution_major_version|int >= 7
+
+- name: Docker container script
+  shell: "sh -c 'pid=`pgrep -x consul`; kill $pid; wait $pid; nohup /usr/local/bin/consul agent -config-dir=/etc/consul.d >/dev/null &'"
+  when: "hostvars[inventory_hostname].get('docker_container', False)"
