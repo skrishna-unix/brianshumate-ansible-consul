@@ -6,7 +6,7 @@
   become: yes
   become_user: root
   roles:
-    - { role: brianshumate.consul }
+    - { role: /home/ubuntu/brianshumate-ansible-consul }
 
   tasks:
     - name: Start Consul
