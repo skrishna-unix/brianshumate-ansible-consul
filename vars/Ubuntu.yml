@@ -8,3 +8,4 @@ consul_ubuntu_sha256: "{{ consul_zip_sha256 }}"
 consul_ubuntu_os_packages:
   - git
   - unzip
+  - python-pip
